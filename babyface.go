@@ -44,14 +44,11 @@ func Setup(hostname string) {
     path, _ := expand("~/.babyface")
     targetsPath := filepath.Join(path, "targets")
     targetHostPath := filepath.Join(targetsPath, hostname)
-    if _, err := os.Stat(path); os.IsNotExist(err) {
-        _ = os.Mkdir(path, os.ModePerm)
-    }
-    if _, err := os.Stat(targetsPath); os.IsNotExist(err) {
-        _ = os.Mkdir(targetsPath, os.ModePerm)
-    }
-    if _, err := os.Stat(targetHostPath); os.IsNotExist(err) {
-        _ = os.Mkdir(targetHostPath, os.ModePerm)
+    files := []string{path, targetsPath, targetHostPath}
+    for _, fpath := range files {
+        if _, err := os.Stat(fpath); os.IsNotExist(err) {
+            _ = os.Mkdir(fpath, os.ModePerm)
+        }
     }
 }
 
@@ -73,44 +70,33 @@ func amass(hostname, subdomainsPath string) {
     }
 }
 
-func readLines(file string) (lines []string, err error) {
-    f, err := os.Open(file)
+func readLines(filePath string) (lines []string, err error) {
+    f, err := os.Open(filePath)
     if err != nil {
-        return nil, err
+        return
     }
     defer f.Close()
-    r := bufio.NewReader(f)
-    for {
-        const delim = '\n'
-        line, err := r.ReadString(delim)
-        if err == nil || len(line) > 0 {
-            if err != nil {
-                line += string(delim)
-            }
-            lines = append(lines, line)
-        }
-        if err != nil {
-            return nil, err
-        }
+
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+          lines = append(lines, scanner.Text())
     }
-    return lines, nil
+    err = scanner.Err()
+    return
 }
 
-func writeLines(file string, lines []string) (err error) {
-    f, err := os.Create(file)
+func writeLines(path string, lines []string) error {
+    file, err := os.Create(path)
     if err != nil {
         return err
     }
-    defer f.Close()
-    w := bufio.NewWriter(f)
-    defer w.Flush()
+    defer file.Close()
+
+    w := bufio.NewWriter(file)
     for _, line := range lines {
-        _, err := w.WriteString(line)
-        if err != nil {
-            return err
-        }
+        fmt.Fprintln(w, line)
     }
-    return nil
+    return w.Flush()
 }
 
 func removeDuplicatesUnordered(elements []string) []string {
