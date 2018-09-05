@@ -21,6 +21,8 @@ import (
 // then runs nmap across the subdomains to find ports and services
 // output saves to ~/.babyface/targets/<domain>/nmap.txt
 
+// utility functions
+
 func expand(path string) (string, error) {
     if len(path) == 0 || path[0] != '~' {
         return path, nil
@@ -39,32 +41,22 @@ func touch(path string) {
     }
 }
 
-func Setup(hostname string) {
-    // setup ~/.babyface
-    path, _ := expand("~/.babyface")
-    targetsPath := filepath.Join(path, "targets")
-    targetHostPath := filepath.Join(targetsPath, hostname)
-    files := []string{path, targetsPath, targetHostPath}
-    for _, fpath := range files {
-        if _, err := os.Stat(fpath); os.IsNotExist(err) {
-            _ = os.Mkdir(fpath, os.ModePerm)
-        }
-    }
+func isCommandAvailable(name string) bool {
+      cmd := exec.Command("command", "-v", name)
+      if err := cmd.Run(); err != nil {
+              return false
+      }
+      return true
 }
 
-func subfinder(hostname, subdomainsPath string) {
-    fmt.Println("subfinder -d", hostname, "-o", subdomainsPath)
-    cmd := exec.Command("subfinder", "-d", hostname, "-o", subdomainsPath)
+func goInstall(repo string) {
+    cmd := exec.Command("go", "get", repo)
     err := cmd.Run()
     if err != nil {
         log.Fatal(err)
     }
-}
-
-func amass(hostname, subdomainsPath string) {
-    fmt.Println("amass -d", hostname, "-o", subdomainsPath, "-brute")
-    cmd := exec.Command("amass", "-d", hostname, "-o", subdomainsPath, "-brute")
-    err := cmd.Run()
+    cmd = exec.Command("go", "install", "-i", repo)
+    err = cmd.Run()
     if err != nil {
         log.Fatal(err)
     }
@@ -130,6 +122,47 @@ func uniqSort(path string) {
     }
 }
 
+// main logic functions
+
+func Setup(hostname string) {
+    // setup ~/.babyface
+    path, _ := expand("~/.babyface")
+    targetsPath := filepath.Join(path, "targets")
+    targetHostPath := filepath.Join(targetsPath, hostname)
+    files := []string{path, targetsPath, targetHostPath}
+    for _, fpath := range files {
+        if _, err := os.Stat(fpath); os.IsNotExist(err) {
+            _ = os.Mkdir(fpath, os.ModePerm)
+        }
+    }
+
+    // todo: install subfinder, amass, and nmap if they aren't already
+    if !isCommandAvailable("subfinder") {
+        goInstall("github.com/subfinder/subfinder")
+    }
+    if !isCommandAvailable("amass") {
+        goInstall("github.com/OWASP/Amass")
+    }
+}
+
+func Subfinder(hostname, subdomainsPath string) {
+    fmt.Println("subfinder -d", hostname, "-o", subdomainsPath)
+    cmd := exec.Command("subfinder", "-d", hostname, "-o", subdomainsPath)
+    err := cmd.Run()
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+
+func Amass(hostname, subdomainsPath string) {
+    fmt.Println("amass -d", hostname, "-o", subdomainsPath, "-brute")
+    cmd := exec.Command("amass", "-d", hostname, "-o", subdomainsPath, "-brute")
+    err := cmd.Run()
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+
 func SubdomainScan(hostname, subdomainsPath string) {
     touch(subdomainsPath)
 
@@ -137,11 +170,11 @@ func SubdomainScan(hostname, subdomainsPath string) {
     wg.Add(2)
     go func() {
         defer wg.Done()
-        subfinder(hostname, subdomainsPath)
+        Subfinder(hostname, subdomainsPath)
     }()
     go func() {
         defer wg.Done()
-        amass(hostname, subdomainsPath)
+        Amass(hostname, subdomainsPath)
     }()
     wg.Wait()
 
@@ -170,5 +203,6 @@ func main() {
 
     Setup(hostname)    
     SubdomainScan(hostname, subdomainsPath)
-    NmapScan(subdomainsPath, nmapOutPath)   
+    NmapScan(subdomainsPath, nmapOutPath)
+    fmt.Println("🙃")
 }
